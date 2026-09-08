@@ -107,7 +107,7 @@ def create_support_buttons():
     keyboard = {
         "inline_keyboard": [
             [
-                {"text": "پیوی پشتیبانی", "url": "https://t.me/sinyoremad", "style": "primary", "icon_custom_emoji_id": "5102958950567905106"},
+                {"text": "پیوی پشتیبانی", "url": "https://t.me/Aliconfigs", "style": "primary", "icon_custom_emoji_id": "5102958950567905106"},
                 {"text": "پشتیبانی ربات", "callback_data": "support_bot", "style": "primary", "icon_custom_emoji_id": "5102788607869978573"}
             ],
             [{"text": "بازگشت", "callback_data": "back_main", "style": "danger", "icon_custom_emoji_id": "5107127053119915925"}]
@@ -162,7 +162,7 @@ def create_admin_verify_keyboard():
 def create_receipt_sent_keyboard():
     keyboard = {
         "inline_keyboard": [
-            [{"text": "پیوی ادمین", "url": "https://t.me/sinyoremad", "style": "primary", "icon_custom_emoji_id": "5814670671153730702"}],
+            [{"text": "پیوی ادمین", "url": "https://t.me/aliconfigs", "style": "primary", "icon_custom_emoji_id": "5814670671153730702"}],
             [{"text": "بازگشت", "callback_data": "back_main", "style": "danger", "icon_custom_emoji_id": "5107127053119915925"}]
         ]
     }
@@ -190,7 +190,7 @@ async def show_join_message(update, context):
         f'<b>[6260176972953949338] سلام عشقم</b>\n\n'
         f'<b>[6258234230396949553] خوش اومدی به ربات</b>\n\n'
         f'<b>[6257971296794057056] اول یه جوین توی چنل زیر بده بعد بریم حال کنیم :)</b>\n'
-        f'<b>🔗 <a href="https://t.me/emojiperim">https://t.me/emojiperim</a></b>'
+        f'<b>🔗 <a href="https://t.me/SelfPersiangulf">https://t.me/SelfPersiangulf</a></b>'
     )
     final_text = replace_emoji_ids(join_text)
     reply_markup = create_join_keyboard()
@@ -503,8 +503,8 @@ async def show_payment_info(update: Update, context: ContextTypes.DEFAULT_TYPE):
     first_name = user.first_name if user.first_name else user.username if user.username else "کاربر"
     payment_text = (
         f'<b>[5830326445422940546] مبلغ تعیین شده: {amount} تومان</b>\n'
-        f'<b>[5830221171479548287]شماره کارت برای افزایش موجودی:</b>\n<b>12345678899999</b>\n'
-        f'<b>[5830204369567485741]نام: @sinyoremad</b>\n\n'
+        f'<b>[5830221171479548287]شماره کارت برای افزایش موجودی:</b>\n<b>6277601405245190</b>\n'
+        f'<b>[5830204369567485741]نام: زارعان</b>\n\n'
         f'<blockquote><b>[5830203935775789535]{first_name} ابتدا مبلغ تعیین شده را به شماره کارت بالا انتقال داده و سپس عکس رسید را در همین بخش ارسال کنید.[5834933356193649751]</b></blockquote>\n\n'
         f'<b>[5830348293921576631]رسید شما: </b>'
     )
@@ -686,7 +686,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user.id != SUPPORT_ID:
             is_joined = await check_user_joined(user.id, context)
             if not is_joined:
-                join_text = f'<b>[6257971296794057056] شما در کانال عضو نیستید!</b>\n\n<b>لطفاً ابتدا در کانال زیر عضو شوید:</b>\n<b>🔗 <a href="https://t.me/emojiperim">https://t.me/emojiperim</a></b>'
+                join_text = f'<b>[6257971296794057056] شما در کانال عضو نیستید!</b>\n\n<b>لطفاً ابتدا در کانال زیر عضو شوید:</b>\n<b>🔗 <a href="https://t.me/SelfPersiangulf">https://t.me/SelfPersiangulf</a></b>'
                 final_text = replace_emoji_ids(join_text)
                 await update.message.reply_text(final_text, parse_mode="HTML", reply_markup=create_join_keyboard(), disable_web_page_preview=True)
                 return
