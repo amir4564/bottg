@@ -5,7 +5,7 @@ import logging
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.ERROR)
 
-BOT_TOKEN = "8266974282:AAEQt54_iNNDtn7Epa13uopIbwpGzLPgvxA"
+BOT_TOKEN = "8984503981:AAGOyOcS1ogy0NXj0Sp-202i4eQDQ8XVNAU"
 SUPPORT_ID = 7845464086
 SUPPORT_USERNAME = "@Aliconfigs"
 CHANNEL_ID = "@SelfPersiangulf"
