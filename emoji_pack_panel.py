@@ -7,9 +7,9 @@
 # ═══════════════════════════════════════════════════════════
 import re, json, requests
 
-PANEL_BOT_TOKEN = "توکن_بات_دوم_برای_پنل"   # ⬅️ بات جدید از BotFather
-MAIN_BOT_TOKEN  = "توکن_بات_اصلی"            # ⬅️ همون باتی که توی کانال پست می‌ذاره
-ADMIN_IDS = {123456789}                       # ⬅️ آیدی عددی خودت
+PANEL_BOT_TOKEN = "8981709760:AAH08wkY9XwdJcQcTHoFX9ByBmWe50srROo"
+MAIN_BOT_TOKEN  = "8266974282:AAEQt54_iNNDtn7Epa13uopIbwpGzLPgvxA"
+ADMIN_IDS = {7845464086}
 
 PANEL_API     = f"https://api.telegram.org/bot{PANEL_BOT_TOKEN}"
 MAIN_API      = f"https://api.telegram.org/bot{MAIN_BOT_TOKEN}"
