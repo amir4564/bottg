@@ -31,6 +31,7 @@ def replace_emoji_ids(text):
 
 # ═══════════════════ پنل ساخت پک ایموجی (فقط ادمین) ═══════════════════
 PACK_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
+FILE_API = f"https://api.telegram.org/file/bot{BOT_TOKEN}"   # ⬅️ فرمت درست: file/bot<TOKEN>
 
 EMOJI_UNIT_RE = re.compile(
     "[\U0001F1E6-\U0001F1FF]{2}"
@@ -100,8 +101,9 @@ async def _download_sticker(file_id, retries=3):
             res = await tg_api("getFile", {"file_id": file_id})
             if not res.get("ok"):
                 raise RuntimeError(f"getFile: {res.get('description')}")
+            file_url = f"{FILE_API}/{res['result']['file_path']}"   # ⬅️ فیکس: file/bot<TOKEN>/path
             async with httpx.AsyncClient(timeout=180) as client:
-                r = await client.get(f"{PACK_API}/file/{res['result']['file_path']}")
+                r = await client.get(file_url)
                 r.raise_for_status()
                 return r.content
         except Exception as e:
@@ -174,7 +176,6 @@ async def _build_pack(short_name, title, items):
 
     res = await _create_set(name, title, stickers, files)
 
-    # اگه اسم قبلاً گرفته شده، پسوند تصادفی بزن و دوباره تلاش کن
     if not res.get("ok") and "occupied" in str(res.get("description", "")):
         suffix = "_" + "".join(random.choices(string.ascii_lowercase + string.digits, k=4))
         name = base[:64 - len(suffix)] + suffix
@@ -929,7 +930,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 full = await _build_pack(short, title, items)
                 pt, rows = await _pack_report(full)
             except Exception as e:
-                # لاگ کامل traceback توی Railway + نمایش نوع خطا در تلگرام
                 logging.error("خطای ساخت پک:", exc_info=True)
                 err_text = str(e).strip() if str(e).strip() else type(e).__name__
                 try:
