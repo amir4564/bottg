@@ -969,17 +969,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except:
         pass
 
+async def error_handler(update, context):
+    logging.error("خطا در پردازش آپدیت:", exc_info=context.error)
+
 def main():
     app = Application.builder().token(BOT_TOKEN).build()
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("help", show_help))
-    app.add_handler(CommandHandler("agency", show_agency))
-    app.add_handler(CommandHandler("support", show_support))
-    app.add_handler(CommandHandler("packpanel", pack_panel_cmd))
-    app.add_handler(CommandHandler("cancel", cancel_pack_cmd))
+    private = filters.ChatType.PRIVATE  # فقط چت خصوصی؛ پست‌های کانال نادیده گرفته می‌شن
+
+    app.add_handler(CommandHandler("start", start, filters=private))
+    app.add_handler(CommandHandler("help", show_help, filters=private))
+    app.add_handler(CommandHandler("agency", show_agency, filters=private))
+    app.add_handler(CommandHandler("support", show_support, filters=private))
+    app.add_handler(CommandHandler("packpanel", pack_panel_cmd, filters=private))
+    app.add_handler(CommandHandler("cancel", cancel_pack_cmd, filters=private))
     app.add_handler(CallbackQueryHandler(button_callback))
-    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.add_handler(MessageHandler(filters.PHOTO, handle_message))
+    app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & private, handle_message))
+    app.add_handler(MessageHandler(filters.PHOTO & private, handle_message))
+    app.add_error_handler(error_handler)
     print("start")
     app.run_polling()
 
