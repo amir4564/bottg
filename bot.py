@@ -11,6 +11,7 @@ import logging
 
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.ERROR)
 
+# توکن بات را مستقیماً اینجا قرار بده
 BOT_TOKEN = "8266974282:AAEQt54_iNNDtn7Epa13uopIbwpGzLPgvxA"
 SUPPORT_ID = 7845464086
 SUPPORT_USERNAME = "@Aliconfigs"
@@ -21,17 +22,54 @@ user_balances = {}
 user_channels = {}
 
 def replace_emoji_ids(text):
-    pattern = r'\[(\d+)\]'
-    matches = re.findall(pattern, text)
-    new_text = text
-    for emoji_id in matches:
-        replacement = f'<tg-emoji emoji-id="{emoji_id}">😎</tg-emoji>'
-        new_text = new_text.replace(f'[{emoji_id}]', replacement)
-    return new_text
+    """برای متن‌های داخلی ربات: [CUSTOM_EMOJI_ID] را به تگ HTML تبدیل می‌کند."""
+    def repl(match):
+        emoji_id = match.group(1)
+        # متن داخل تگ فقط fallback است؛ برای پست‌های کاربر تابع async زیر ID را اعتبارسنجی می‌کند.
+        return f'<tg-emoji emoji-id="{emoji_id}">▫️</tg-emoji>'
+    return re.sub(r'\[(\d{5,})\]', repl, text)
+
+async def process_post_emojis(text, context):
+    """Custom Emoji IDهای داخل [ID] را اعتبارسنجی و به HTML تلگرام تبدیل می‌کند."""
+    if not isinstance(text, str):
+        raise ValueError("متن پیام معتبر نیست")
+
+    emoji_ids = list(dict.fromkeys(re.findall(r'\[(\d{5,})\]', text)))
+    if not emoji_ids:
+        return text, []
+
+    try:
+        stickers = await context.bot.get_custom_emoji_stickers(custom_emoji_ids=emoji_ids)
+    except Exception as e:
+        logging.error("خطا در get_custom_emoji_stickers", exc_info=True)
+        raise RuntimeError(f"بررسی آیدی ایموجی ناموفق بود: {e}")
+
+    emoji_map = {
+        str(sticker.custom_emoji_id): (sticker.emoji or "▫️")
+        for sticker in stickers
+        if getattr(sticker, "custom_emoji_id", None)
+    }
+
+    invalid_ids = [eid for eid in emoji_ids if eid not in emoji_map]
+    if invalid_ids:
+        return None, invalid_ids
+
+    def repl(match):
+        eid = match.group(1)
+        fallback = emoji_map[eid]
+        return f'<tg-emoji emoji-id="{eid}">{fallback}</tg-emoji>'
+
+    return re.sub(r'\[(\d{5,})\]', repl, text), []
+
+
+def contains_custom_emoji_id(text):
+    """آیا متن شامل Custom Emoji ID با فرمت [ID] است؟"""
+    return bool(re.search(r'\[(\d{5,})\]', text or ""))
+
 
 # ═══════════════════ پنل ساخت پک ایموجی (فقط ادمین) ═══════════════════
 PACK_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
-FILE_API = f"https://api.telegram.org/file/bot{BOT_TOKEN}"   # ⬅️ فرمت درست: file/bot<TOKEN>
+FILE_API = f"https://api.telegram.org/file/bot{BOT_TOKEN}"
 
 EMOJI_UNIT_RE = re.compile(
     "[\U0001F1E6-\U0001F1FF]{2}"
@@ -43,17 +81,35 @@ EMOJI_UNIT_RE = re.compile(
 _pack_bot_id = None
 _pack_bot_username = None
 
+class FloodWait(Exception):
+    pass
+
 async def tg_api(method, payload=None, files=None, retries=3):
-    last_exc = None
+    """صدا زدن API + مدیریت خودکار محدودیت (429) تلگرام"""
+    last_result = None
     for attempt in range(retries):
         try:
             async with httpx.AsyncClient(timeout=180) as client:
                 resp = await client.post(f"{PACK_API}/{method}", data=payload, files=files)
-                return resp.json()
+                data = resp.json()
+            if data.get("ok"):
+                return data
+            if data.get("error_code") == 429:
+                wait = int(data.get("parameters", {}).get("retry_after", 5))
+                if wait <= 30 and attempt < retries - 1:
+                    await asyncio.sleep(wait + 2)
+                    continue
+                raise FloodWait(
+                    f"تلگرام محدودیت زده! {wait} ثانیه ({wait // 60 + 1} دقیقه) صبر کن، "
+                    f"بعد دوباره امتحان کن. وسط محدودیت تلاش نکن که بدتر می‌شه."
+                )
+            last_result = data
+        except FloodWait:
+            raise
         except Exception as e:
-            last_exc = e
-            await asyncio.sleep(1.5 * (attempt + 1))
-    raise RuntimeError(f"{method} ناموفق بعد از {retries} تلاش: {type(last_exc).__name__}: {last_exc}")
+            last_result = {"ok": False, "description": f"{type(e).__name__}: {e}"}
+        await asyncio.sleep(1.5 * (attempt + 1))
+    raise RuntimeError(last_result.get("description", "خطای نامشخص") if last_result else "خطای نامشخص")
 
 def _sanitize(name):
     return re.sub(r"[^A-Za-z0-9_]", "_", name.strip()) or "Pack"
@@ -101,7 +157,7 @@ async def _download_sticker(file_id, retries=3):
             res = await tg_api("getFile", {"file_id": file_id})
             if not res.get("ok"):
                 raise RuntimeError(f"getFile: {res.get('description')}")
-            file_url = f"{FILE_API}/{res['result']['file_path']}"   # ⬅️ فیکس: file/bot<TOKEN>/path
+            file_url = f"{FILE_API}/{res['result']['file_path']}"
             async with httpx.AsyncClient(timeout=180) as client:
                 r = await client.get(file_url)
                 r.raise_for_status()
@@ -193,6 +249,7 @@ async def _build_pack(short_name, title, items):
         }, files={"s": f})
         if not res.get("ok"):
             raise RuntimeError(f"افزودن ایموجی #{idx + 51}: {res.get('description')}")
+        await asyncio.sleep(0.5)  # فاصله بین آپلودها برای جلوگیری از محدودیت
     return name
 
 async def _pack_report(name):
@@ -226,6 +283,45 @@ async def cancel_pack_cmd(update, context):
     context.user_data.pop('pack_name', None)
     if had:
         await update.message.reply_text("لغو شد ✅", parse_mode="HTML")
+
+async def pack_ids_cmd(update, context):
+    """آیدی‌های عددی یه پک موجود رو می‌ده — بدون ساخت پک جدید"""
+    if update.effective_user.id != SUPPORT_ID:
+        return
+    if not context.args:
+        await update.message.reply_text(
+            "اسم پک رو بده (یا لینکش):\n"
+            "<code>/packids MyEmojis</code>\n"
+            "<code>/packids t.me/addemoji/MyEmojis_by_Kia4729_bot</code>",
+            parse_mode="HTML")
+        return
+    raw = context.args[0]
+    m = re.search(r"(?:addemoji|addstickers)/([A-Za-z0-9_]+)", raw)
+    name = m.group(1) if m else raw.strip()
+    prog = await update.message.reply_text("⏳ دارم پک رو می‌خونم...")
+    try:
+        pt, rows = await _pack_report(name)
+    except Exception as e:
+        await prog.edit_text(f"❌ پک «{name}» پیدا نشد یا خطا داد:\n{e}")
+        return
+    lines = [f"📦 پک <b>{pt}</b> — {len(rows)} ایموجی:", ""]
+    sample = []
+    for emo, eid in rows:
+        lines.append(f"{emo} → <code>{eid}</code>")
+        sample.append(f'<tg-emoji emoji-id="{eid}">{emo}</tg-emoji>')
+    text = "\n".join(lines)
+    if len(text) > 4000:
+        f = io.BytesIO(text.encode())
+        f.name = f"{name}_ids.txt"
+        await prog.delete()
+        await update.message.reply_document(f, caption=f"📁 آیدی‌های پک {pt}")
+    else:
+        await prog.edit_text(text, parse_mode="HTML")
+    for i in range(0, len(sample), 30):
+        try:
+            await update.message.reply_text("\n".join(sample[i:i + 30]), parse_mode="HTML")
+        except:
+            pass
 # ═══════════════════ پایان پنل پک ═══════════════════
 
 async def check_user_joined(user_id, context):
@@ -933,9 +1029,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 logging.error("خطای ساخت پک:", exc_info=True)
                 err_text = str(e).strip() if str(e).strip() else type(e).__name__
                 try:
-                    await prog.edit_text(f"❌ خطا: {err_text}\n\nبا /packpanel دوباره تلاش کن.")
+                    await prog.edit_text(f"❌ خطا: {err_text}")
                 except:
-                    await update.message.reply_text(f"❌ خطا: {err_text}\n\nبا /packpanel دوباره تلاش کن.")
+                    await update.message.reply_text(f"❌ خطا: {err_text}")
                 return
             lines = [f"✅ پک <b>{pt}</b> ساخته شد!", f"نام پک: <code>{full}</code>", ""]
             sample = []
@@ -962,19 +1058,70 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         if context.user_data.get('waiting_for_post'):
             channel = context.user_data.get('selected_channel')
-            if channel:
-                try:
-                    final_text = replace_emoji_ids(update.message.text)
-                    await context.bot.send_message(chat_id=channel, text=final_text, parse_mode="HTML")
-                    confirm_post = f'[5105062921902229396] <b>پیام شما با موفقیت به کانال {channel} ارسال شد!</b>'
-                    final_confirm = replace_emoji_ids(confirm_post)
-                    await update.message.reply_text(final_confirm, parse_mode="HTML")
-                    context.user_data['waiting_for_post'] = False
-                    context.user_data['selected_channel'] = None
-                    await show_select_channel(update, context)
-                except:
-                    await update.message.reply_text("❌ خطا در ارسال پیام به کانال! لطفاً مطمئن شوید ربات در کانال ادمین است.", parse_mode="HTML")
+            user_text = update.message.text or ""
+
+            if not channel:
+                context.user_data['waiting_for_post'] = False
+                await update.message.reply_text("❌ کانال انتخاب‌شده پیدا نشد. دوباره کانال را انتخاب کنید.")
                 return
+
+            if not user_text.strip():
+                await update.message.reply_text("❌ لطفاً متن پست را ارسال کنید.")
+                return
+
+            try:
+                final_text, invalid_ids = await process_post_emojis(user_text, context)
+
+                if invalid_ids:
+                    ids_text = "\n".join(f"• <code>{eid}</code>" for eid in invalid_ids)
+                    await update.message.reply_text(
+                        "❌ این آیدی‌های ایموجی معتبر نیستند یا بات به آن‌ها دسترسی ندارد:\n\n"
+                        f"{ids_text}\n\n"
+                        "فرمت صحیح: <code>سلام [1234567890123456789]</code>",
+                        parse_mode="HTML"
+                    )
+                    return
+
+                # Telegram Bot API در کانال‌ها فقط در صورتی Custom Emoji را بدون
+                # تبدیل به fallback می‌پذیرد که بات شرایط لازم (مثل username خریداری‌شده
+                # و assign شده از طریق Fragment) را داشته باشد. در غیر این صورت ارسال
+                # همان متن باعث نمایش fallback خواهد شد؛ بنابراین از ارسال اشتباه جلوگیری می‌کنیم.
+                try:
+                    await context.bot.send_message(
+                        chat_id=channel,
+                        text=final_text,
+                        parse_mode="HTML"
+                    )
+                except Exception as send_error:
+                    logging.error("Telegram rejected Custom Emoji post", exc_info=True)
+                    raise RuntimeError(
+                        "تلگرام ارسال Custom Emoji در این کانال را برای این بات مجاز نکرده است.\n"
+                        "برای ارسال ایموجی پرمیوم واقعی در کانال باید بات شرایط لازم تلگرام را داشته باشد؛ "
+                        "صرفاً تغییر کد پایتون این محدودیت را دور نمی‌زند.\n\n"
+                        f"خطای Telegram: {send_error}"
+                    )
+
+                confirm_post = (
+                    f'[5105062921902229396] '
+                    f'<b>پیام شما با موفقیت به کانال {channel} ارسال شد!</b>'
+                )
+                await update.message.reply_text(
+                    replace_emoji_ids(confirm_post),
+                    parse_mode="HTML"
+                )
+
+                context.user_data['waiting_for_post'] = False
+                context.user_data['selected_channel'] = None
+                await show_select_channel(update, context)
+
+            except Exception as e:
+                logging.error("خطا در ارسال پست", exc_info=True)
+                await update.message.reply_text(
+                    "❌ خطا در ارسال پیام به کانال.\n\n"
+                    f"جزئیات: <code>{str(e)[:500]}</code>",
+                    parse_mode="HTML"
+                )
+            return
         if context.user_data.get('waiting_for_receipt'):
             if update.message.photo:
                 await handle_receipt(update, context)
@@ -994,16 +1141,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if user.id == SUPPORT_ID:
                 await send_admin_reply(update, context)
                 return
-        if user.id == SUPPORT_ID:
-            pattern = r'\[(\d+)\]'
-            matches = re.findall(pattern, update.message.text)
-            if matches:
-                new_text = update.message.text
-                for emoji_id in matches:
-                    replacement = f'<tg-emoji emoji-id="{emoji_id}">😎</tg-emoji>'
-                    new_text = new_text.replace(f'[{emoji_id}]', replacement)
-                await update.message.reply_text(new_text, parse_mode="HTML")
-                return
+        # دیگر ID های ایموجی در این بخش به صورت دستی و با fallback 😎 پردازش نمی‌شوند.
+        # پردازش Custom Emoji فقط در مسیر اختصاصی process_post_emojis انجام می‌شود.
         if update.message.text and update.message.text.startswith('/help'):
             await show_help(update, context)
             return
@@ -1030,6 +1169,7 @@ def main():
     app.add_handler(CommandHandler("agency", show_agency, filters=private))
     app.add_handler(CommandHandler("support", show_support, filters=private))
     app.add_handler(CommandHandler("packpanel", pack_panel_cmd, filters=private))
+    app.add_handler(CommandHandler("packids", pack_ids_cmd, filters=private))
     app.add_handler(CommandHandler("cancel", cancel_pack_cmd, filters=private))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND & private, handle_message))
